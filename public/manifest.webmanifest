@@ -1,0 +1,10 @@
+{
+  "name": "化安智控——化工过程安全与清洁生产智能辅助系统",
+  "short_name": "化安智控",
+  "description": "化学品查询、设备巡检、事故应急、清洁生产评价与 PID 温控仿真。",
+  "start_url": "/#home",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#09234a",
+  "lang": "zh-CN"
+}
