@@ -5,6 +5,7 @@ import {
   Chemical,
   EmergencyType,
   InspectionItem,
+  ResponseLevel,
   RiskLevel,
   chemicals,
   dataVersion,
@@ -12,12 +13,12 @@ import {
   emergencyTypes,
   equipmentTypes,
   inspectionItems,
+  responseProfiles,
 } from "./data";
 
 type PageId = "home" | "chemicals" | "inspection" | "emergency" | "cleaner" | "simulation";
 type InspectionStatus = "normal" | "abnormal" | "na" | "review";
 type InspectionAnswer = { status: InspectionStatus; value: string; note: string };
-type ResponseLevel = "蓝色" | "黄色" | "橙色" | "红色";
 type InspectionRecord = {
   id: string;
   equipment: string;
@@ -465,6 +466,7 @@ function EmergencyModule() {
   const baseResponseLevel = getBaseResponseLevel(selected.level);
   const assessedResponseLevel: ResponseLevel = injury || offsite || scale === "large" ? "红色" : scale === "medium" ? "橙色" : "蓝色";
   const responseLevel = maxResponseLevel(baseResponseLevel, assessedResponseLevel);
+  const responseProfile = responseProfiles[responseLevel];
   const startFlow = () => { if (window.confirm(`确认启动“${selected.name}”应急指导？真实事故必须同时服从现场指挥和企业预案。`)) { setStarted(true); setStep(0); setCompleted([]); } };
   const selectType = (item: EmergencyType) => { setSelected(item); setStarted(false); setStep(0); setCompleted([]); setScale("small"); setInjury(false); setOffsite(false); };
   return <div className="page emergency-page">
@@ -474,7 +476,20 @@ function EmergencyModule() {
       <aside className="panel accident-list"><div className="accident-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索事故类型或征兆" /></div><div className="accident-items">{filtered.map((item) => <button key={item.id} className={selected.id === item.id ? "active" : ""} onClick={() => selectType(item)}><i /><div><strong>{item.name}</strong><small>{item.category} · {item.level}</small></div><span>›</span></button>)}</div></aside>
       <div className="emergency-main">
         <section className="panel incident-overview"><div className="incident-title"><div><p>{selected.category}</p><h2>{selected.name}</h2><span>{selected.scenario}</span></div><label className={`response-badge level-${responseLevel}`}>{responseLevel}响应建议</label></div><div className="incident-grid"><div><small>典型征兆</small><p>{selected.signs}</p></div><div><small>主要风险</small><p>{selected.risks}</p></div><div className="wide"><small>首要动作</small><p>{selected.steps[0]}</p></div></div></section>
-        <section className="panel response-assessor"><div><h3>响应等级快速研判</h3><p>基础等级 {baseResponseLevel}，结合规模、伤亡和厂外影响动态升级。</p></div><label>事故规模<select value={scale} onChange={(event) => setScale(event.target.value)}><option value="small">少量 / 局部</option><option value="medium">持续 / 车间范围</option><option value="large">大量 / 装置范围</option></select></label><label className="switch-row"><input type="checkbox" checked={injury} onChange={(event) => setInjury(event.target.checked)} /><span>有人受伤</span></label><label className="switch-row"><input type="checkbox" checked={offsite} onChange={(event) => setOffsite(event.target.checked)} /><span>可能影响厂外</span></label><strong className={`response-badge level-${responseLevel}`}>{responseLevel}</strong></section>
+        <section className="panel response-assessor"><div><h3>响应等级快速研判</h3><p>基础等级 {baseResponseLevel}；当前建议执行“{responseProfile.name}”。</p></div><label>事故规模<select value={scale} onChange={(event) => setScale(event.target.value)}><option value="small">少量 / 局部</option><option value="medium">持续 / 车间范围</option><option value="large">大量 / 装置范围</option></select></label><label className="switch-row"><input type="checkbox" checked={injury} onChange={(event) => setInjury(event.target.checked)} /><span>有人受伤</span></label><label className="switch-row"><input type="checkbox" checked={offsite} onChange={(event) => setOffsite(event.target.checked)} /><span>可能影响厂外</span></label><strong className={`response-badge level-${responseLevel}`}>{responseLevel}</strong></section>
+        <section className={`panel level-guidance level-guidance-${responseLevel}`}>
+          <div className="level-guidance-head"><div><small>当前等级的组织响应措施</small><h3>{responseProfile.name}</h3><p>{responseProfile.trigger}</p></div><span className={`response-badge level-${responseLevel}`}>{responseLevel}响应</span></div>
+          <div className="level-guidance-grid">
+            <div><strong>指挥层级</strong><p>{responseProfile.command}</p></div>
+            <div><strong>报警与报告</strong><p>{responseProfile.reporting}</p></div>
+            <div><strong>警戒与撤离</strong><p>{responseProfile.evacuation}</p></div>
+            <div><strong>处置力量</strong><p>{responseProfile.resources}</p></div>
+            <div><strong>外部联动</strong><p>{responseProfile.external}</p></div>
+            <div><strong>升级条件</strong><p>{responseProfile.upgrade}</p></div>
+          </div>
+          <div className="level-guidance-recovery"><strong>恢复 / 降级要求</strong><p>{responseProfile.recovery}</p></div>
+          <p className="level-guidance-note">本等级为系统辅助研判；实际启动条件、报告程序和指挥权限以本单位应急预案、属地规定和现场指挥为准。</p>
+        </section>
         {started ? <section className="panel emergency-wizard"><div className="emergency-progress">{selected.steps.map((_, index) => <button key={index} className={`${step === index ? "active" : ""} ${completed.includes(index) ? "done" : ""}`} onClick={() => setStep(index)}><span>{completed.includes(index) ? "✓" : index + 1}</span><small>{emergencyStepNames[index]}</small></button>)}</div><div className="emergency-step-content"><div className="step-number">STEP {step + 1}</div><h2>{emergencyStepNames[step]}</h2><p className="main-action">{selected.steps[step]}</p><div className="emergency-detail-grid"><div className="prohibit"><strong>禁止操作</strong><p>{selected.prohibited}</p></div><div><strong>所需防护</strong><p>{selected.ppe}</p></div><div><strong>升级条件</strong><p>{selected.escalation}</p></div><div><strong>恢复条件</strong><p>{selected.recovery}</p></div></div><div className="wizard-actions"><button className="button button-outline" disabled={step === 0} onClick={() => setStep((value) => value - 1)}>← 上一步</button><label className="complete-check"><input type="checkbox" checked={completed.includes(step)} onChange={(event) => setCompleted(event.target.checked ? [...completed, step] : completed.filter((value) => value !== step))} />当前步骤已完成</label>{step < selected.steps.length - 1 ? <button className="button button-danger" onClick={() => setStep((value) => value + 1)}>下一步 →</button> : <button className="button button-primary" onClick={() => window.alert("流程记录完成。恢复生产前必须完成检测、完整性确认与批准。")}>完成并记录</button>}</div></div></section> : <section className="panel flow-preview"><div><span className="preview-symbol">!</span><h2>准备启动分步应急流程</h2><p>系统将按 6 个阶段逐步展示操作、禁忌、防护和升级条件。</p><button className="button button-danger" onClick={startFlow}>二次确认并启动</button></div><ol>{selected.steps.map((content, index) => <li key={content}><span>{index + 1}</span><div><strong>{emergencyStepNames[index]}</strong><p>{content}</p></div></li>)}</ol></section>}
       </div>
     </section>

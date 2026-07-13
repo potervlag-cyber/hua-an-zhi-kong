@@ -12,6 +12,7 @@ const raw = sourceData as unknown as {
 const text = (value: Cell) => (value == null ? "" : String(value));
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
+export type ResponseLevel = "蓝色" | "黄色" | "橙色" | "红色";
 
 export type Chemical = {
   id: number;
@@ -193,6 +194,40 @@ export const emergencyTypes: EmergencyType[] = raw.emergency["分步应急流程
     scenario: text(row[16]),
     note: text(row[17]),
   }));
+
+export type ResponseProfile = {
+  level: ResponseLevel;
+  name: string;
+  trigger: string;
+  command: string;
+  reporting: string;
+  evacuation: string;
+  resources: string;
+  external: string;
+  upgrade: string;
+  recovery: string;
+};
+
+export const responseProfiles = Object.fromEntries(
+  raw.emergency["响应分级措施"]
+    .slice(4)
+    .filter((row) => ["蓝色", "黄色", "橙色", "红色"].includes(text(row[0])))
+    .map((row) => {
+      const profile: ResponseProfile = {
+        level: text(row[0]) as ResponseLevel,
+        name: text(row[1]),
+        trigger: text(row[2]),
+        command: text(row[3]),
+        reporting: text(row[4]),
+        evacuation: text(row[5]),
+        resources: text(row[6]),
+        external: text(row[7]),
+        upgrade: text(row[8]),
+        recovery: text(row[9]),
+      };
+      return [profile.level, profile];
+    }),
+) as Record<ResponseLevel, ResponseProfile>;
 
 export const emergencyStepNames = [
   "报警撤离",
