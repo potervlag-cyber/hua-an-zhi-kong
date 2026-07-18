@@ -20,7 +20,17 @@
 
 # misc
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
 *.pem
+*.key
+*.jks
+*.keystore
+*.apk
+*.aab
+local.properties
 
 # debug
 npm-debug.log*
@@ -37,6 +47,8 @@ yarn-error.log*
 # typescript
 next-env.d.ts
 /dist/
+/dist-android/
+/android/build/
 /.wrangler/
 /outputs/
 /work/
@@ -44,3 +56,5 @@ next-env.d.ts
 /.pnpm-store/
 /.agents/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]

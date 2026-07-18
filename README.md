@@ -4,6 +4,28 @@
 
 > 安全声明：本系统用于学习、辅助判断和初步风险识别，不替代化学品 SDS、企业操作规程、作业许可、应急预案、设备说明书、法定检验或专业人员判断。
 
+## 快速开始
+
+环境要求：Node.js 22.13 或更高版本。
+
+```bash
+git clone <你的仓库地址>
+cd <仓库目录>
+npm ci
+npm run dev
+```
+
+生产构建与完整测试：
+
+```bash
+npm run build
+npm test
+```
+
+Android 调试包可在 Windows 上运行 `npm run build:apk`，详细环境配置见 [Android APK 构建说明](docs/ANDROID_BUILD.md)。
+
+面向使用者的逐模块操作步骤、数据口径和来源说明见 [使用说明与数据来源](docs/USER_GUIDE.md)。
+
 ## 1. 总体功能架构
 
 ```text
@@ -65,8 +87,8 @@
 
 ### 3.2 设备安全巡检
 
-1. 选择设备类型，填写设备位号与检查人员。
-2. 系统仅显示当前检查项，并给出检查方法和正常判定标准。
+1. 手机端依次进入设备选择、设备信息和分步检查三个界面。
+2. 系统仅显示当前检查项，并给出检查方法、正常判定标准和对应实测值示例。
 3. 选择“正常 / 异常 / 不适用 / 待复核”，填写实测值和备注。
 4. 选择“异常”时立即展示后果、处置建议、停机与上报提示。
 5. 顶部进度条和底部风险得分随检查结果实时更新。
@@ -75,31 +97,35 @@
 
 ### 3.3 事故应急指导
 
-1. 通过事故名称、类别或征兆检索事故类型。
-2. 根据规模、人员受伤和厂外影响研判蓝/黄/橙/红响应建议。
-3. 二次确认后启动应急流程。
+1. 在独立事故选择界面通过名称、类别或征兆检索事故类型。
+2. 进入响应建议界面，根据规模、人员受伤和厂外影响研判蓝/黄/橙/红等级。
+3. 确认建议后进入应急流程界面，并进行二次启动确认。
 4. 按“报警撤离→切断停车→警戒检测→专业控制→救护环境→监测恢复”逐步执行。
 5. 每步同时展示禁止操作、PPE、升级条件与恢复条件。
 6. 所有步骤均可勾选完成；最终恢复必须经过检测、设备完整性确认与批准。
 
 ### 3.4 清洁生产评价
 
-1. 输入生产周期内产量、原料、能源、水、排放和回收数据。
-2. 页面实时计算九项核心指标和六个评价维度。
+1. 在数据填写界面输入生产周期内产量、原料、能源、水、排放和回收数据。
+2. 校验通过后进入评分界面，计算九项核心指标和六个评价维度。
 3. 按 100 分制加权汇总，输出一至四级清洁生产水平。
 4. 根据超目标指标生成源头减量、回收利用、换热优化等建议。
 
 ### 3.5 PID 温控仿真
 
-1. 设置初始/目标/环境温度、物料参数、加热冷却能力、仿真周期和 PID 参数。
-2. 点击开始后按离散时间步推进能量平衡。
+1. 在参数界面设置温度、物料参数、加热冷却能力、仿真周期和 PID 参数。
+2. 进入曲线界面后按离散时间步推进能量平衡。
 3. 动态显示温度、偏差、加热功率、冷却阀门与变化速率。
-4. 自动计算最大超调、稳态误差、调节时间和稳定性。
+4. 仿真完成后进入结果界面，计算最大超调、稳态误差、调节时间和稳定性。
 5. 可暂停、重置、导出数据，并与一组更保守的 PID 参数对比。
 
-## 4. 建议数据库表结构
+## 4. 数据库结构
 
-当前原型使用静态 JSON 和浏览器本地存储，后续后端可按下表落库。所有主键建议使用 UUID；业务表统一增加 `created_at`、`updated_at`、`deleted_at` 和 `version`。
+Android APK 已内置 `android/assets/databases/chemicals.db`（SQLite），包含 1500 条化学品记录、元数据表及名称、CAS、分子式、风险等级索引。应用启动时将只读数据库复制到应用私有目录，并通过原生 JavaScript Bridge 提供给离线 WebView；Web 版本仍使用同源 JSON 数据。数据由 100 条人工整理安全条目、900 条 [PubChem PUG REST](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest) 基础属性和 500 条带唯一有效 CAS 的 [PubChem PUG-View](https://pubchem.ncbi.nlm.nih.gov/docs/pug-view) 实验理化性质记录组成。未核验的危险性字段统一标为“待核验”，不替代 SDS。
+
+对后 1400 条记录还执行了来源可追溯的 GHS 批量核验：713 条命中至少一个欧盟 CLP/ECHA、NITE 或 Safe Work Australia 等监管/权威来源，4 条仅有普通提交来源，683 条没有公开 GHS 分类。应用保存 H/P 代码、信号词、图示、来源数量、一致 H 代码和核验日期；“来源已核验”表示来源与分类记录可追溯，不表示可替代具体产品 SDS。
+
+巡检、报告、应急等后续业务数据可按下表继续落库。所有业务表主键建议使用 UUID，并增加 `created_at`、`updated_at`、`deleted_at` 和 `version`。
 
 | 表名 | 关键字段 | 说明 |
 |---|---|---|
@@ -185,42 +211,66 @@ T[k+1] = T[k] + (dT/dt)×Δt
 ## 9. 项目结构
 
 ```text
+.github/
+├─ workflows/             # Web 测试与手动 APK 构建
+└─ ISSUE_TEMPLATE/        # Bug 与功能建议模板
+android/                  # Android WebView 外壳与 PowerShell 构建脚本
+├─ assets/databases/      # 随 APK 打包的只读 SQLite 化学品数据库
 app/
 ├─ AppClient.tsx          # 应用壳与五个交互模块
-├─ data.ts                # Excel 数据映射、类型与风险标签
-├─ data/source-data.json  # 从三份 Excel 提取的演示知识库
+├─ data.ts                # 数据映射、类型与风险标签
+├─ data/source-data.json  # 三份 Excel 转换后的内置知识库
 ├─ globals.css            # 工业安全视觉系统与响应式样式
+├─ mobile-entry.tsx       # Android 移动端入口
 ├─ layout.tsx             # 中文元数据
-└─ page.tsx               # 应用入口
-work/
-├─ extract-source-json.mjs # 可重复执行的数据提取脚本
-└─ inspect-sources.mjs     # Excel 结构检查脚本
+└─ page.tsx               # Web 应用入口
+docs/                     # 构建与维护文档
+db/pubchem-catalog.json   # PubChem 官方基础属性离线快照
+db/pubchem-physchem-500.json # 500 条 CAS/实验理化性质快照
+db/pubchem-safety-1400.json  # 1400 条来源可追溯 GHS 核验快照
+mobile/                   # Android 内嵌页面模板
+public/                   # Web 图标与清单
+scripts/                  # PubChem 快照与 SQLite 数据库生成脚本
+tests/                    # 服务端渲染和核心数据测试
 ```
 
 ## 10. 示例数据
 
 原型已接入工作区中的三份 Excel：
 
-- `100种常见化学品理化与安全数据.xlsx`：100 种化学品及 23 个字段。
+- `100种常见化学品理化与安全数据.xlsx`：前 100 种人工整理化学品及 23 个字段。
+- `db/pubchem-catalog.json`：PubChem PUG REST 基础属性快照，从中选取 900 条补充记录。
+- `db/pubchem-physchem-500.json`：500 个唯一有效 CAS 及实验理化性质，保留原始单位和实验值。
+- `db/pubchem-safety-1400.json`：1400 条 PubChem GHS 分类核验结果及逐来源 H 代码。
+- `android/assets/databases/chemicals.db`：最终 1500 条离线 SQLite 数据库，随 APK 一起安装。
 - `常用化工设备安全检查与现场巡检表.xlsx`：18 类设备和 107 条检查知识。
 - `常见化工事故类型与分步应急流程.xlsx`：23 类事故、分步流程、应急卡和记录模板。
 
 收藏、最近查询和巡检报告保存在浏览器 `localStorage`，不上传外部服务。后端接入后可用 API 替换本地状态层，现有模块无需改变交互结构。
 
+更新 `app/data/source-data.json` 后，可运行 `npm run db:build` 重建 SQLite。若要重新获取数据，基础属性运行 `powershell -ExecutionPolicy Bypass -File scripts/fetch-pubchem-catalog.ps1`，CAS/实验理化性质运行 `python scripts/fetch-pubchem-physchem.py`，GHS 核验运行 `python scripts/fetch-pubchem-safety.py`，然后使用 `python scripts/build-chemical-database.py --refresh-source`。生成脚本会强制校验恰好 1500 条、500 个唯一 CAS、1400 条 GHS 核验记录、连续唯一 ID 和 SQLite 完整性。
+
 ## 11. 部署与运行
 
-环境要求：Node.js 22.13 或更高版本。
+常用命令：
 
 ```bash
-pnpm install
-pnpm dev
+npm run dev
+npm run build
+npm test
+npm run lint
 ```
 
-打开终端显示的本地地址。生产构建：
+GitHub 仓库包含两项自动化：
 
-```bash
-pnpm build
-pnpm start
-```
+- `CI`：推送到 `main` 或提交 Pull Request 时安装锁定依赖并运行测试；
+- `Build Android APK`：在 Actions 页面手动触发，生成可下载的调试 APK Artifact。
 
 项目采用 vinext/Next.js 兼容结构并保留 `.openai/hosting.json`，可进一步接入 D1/MySQL、R2/对象存储、FastAPI、Node.js 或 Spring Boot 服务。部署真实生产环境前必须完成权限控制、审计日志、数据库迁移、备份恢复、输入校验、SDS 版本管理、企业级安全评审和设备接口隔离。
+
+## 12. 贡献、安全与许可
+
+- 参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
+- 发现漏洞时请按照 [安全政策](SECURITY.md) 私下报告。
+- 版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。
+- 当前仓库尚未指定开源许可证；公开发布前，仓库所有者应根据数据授权和代码使用范围选择合适的许可证。未指定许可证不影响查看代码，但默认不授予复制、修改或分发权利。

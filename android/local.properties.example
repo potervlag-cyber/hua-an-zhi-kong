@@ -1,0 +1,4 @@
+# Copy this file to android/local.properties and update the paths when the
+# Android SDK and JDK are not available through environment variables.
+sdk.dir=C:/Users/your-name/AppData/Local/Android/Sdk
+java.home=C:/Program Files/Android/Android Studio/jbr

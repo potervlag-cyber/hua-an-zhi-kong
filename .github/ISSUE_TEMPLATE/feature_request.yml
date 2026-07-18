@@ -1,0 +1,21 @@
+name: 功能建议
+description: 提议功能或交互改进
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: 使用场景
+      description: 请说明要解决的问题和目标用户。
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 建议方案
+      description: 描述期望的功能、流程或界面。
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 安全影响
+      description: 如涉及安全判断、应急建议或控制参数，请说明依据与边界。

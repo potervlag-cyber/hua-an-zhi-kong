@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Minimal ambient stubs for optional Cloudflare runtime bindings. */
 /** Minimal Cloudflare runtime bindings used by the vinext worker build. */
 declare type D1Database = any;
 

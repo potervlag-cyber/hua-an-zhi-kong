@@ -11,7 +11,7 @@ const raw = sourceData as unknown as {
 
 const text = (value: Cell) => (value == null ? "" : String(value));
 
-export type RiskLevel = "low" | "medium" | "high" | "critical";
+export type RiskLevel = "unknown" | "low" | "medium" | "high" | "critical";
 export type ResponseLevel = "蓝色" | "黄色" | "橙色" | "红色";
 
 export type Chemical = {
@@ -44,6 +44,11 @@ export type Chemical = {
 
 function chemicalRisk(hazards: string, toxicity: string): RiskLevel {
   const value = `${hazards}${toxicity}`;
+  if (/待核验|未核验|部分核验/.test(value)) return "unknown";
+  const hCodes = new Set(value.match(/\bH\d{3}\b/g) ?? []);
+  if (["H200", "H201", "H202", "H203", "H204", "H205", "H250", "H260", "H300", "H310", "H330", "H340", "H350", "H360", "H370"].some((code) => hCodes.has(code))) return "critical";
+  if (["H220", "H221", "H222", "H224", "H225", "H226", "H228", "H240", "H241", "H242", "H251", "H252", "H261", "H270", "H271", "H272", "H301", "H311", "H314", "H317", "H318", "H331", "H334", "H341", "H351", "H361", "H372"].some((code) => hCodes.has(code))) return "high";
+  if (hCodes.size) return "medium";
   if (/剧毒|爆炸|致癌|死亡|急性毒性|自燃|有机过氧化物/.test(value)) return "critical";
   if (/高度易燃|极度易燃|腐蚀|有毒|氧化性|特异性靶器官/.test(value)) return "high";
   if (/易燃|刺激|有害|窒息|健康危害/.test(value)) return "medium";
@@ -52,18 +57,18 @@ function chemicalRisk(hazards: string, toxicity: string): RiskLevel {
 
 function hazardTags(hazards: string) {
   const candidates = [
-    ["易燃", /易燃|可燃/],
-    ["有毒", /毒性|有毒|中毒/],
-    ["腐蚀", /腐蚀/],
-    ["氧化", /氧化/],
-    ["爆炸", /爆炸|爆炸性/],
-    ["健康危害", /致癌|靶器官|健康危害|窒息/],
-    ["环境危害", /环境|水生/],
+    ["易燃", /易燃|可燃|H22[0-8]|H24[01]|H25[0-2]|H26[01]/],
+    ["有毒", /毒性|有毒|中毒|H30[0-2]|H31[0-2]|H33[0-2]/],
+    ["腐蚀", /腐蚀|H290|H314/],
+    ["氧化", /氧化|H27[0-2]/],
+    ["爆炸", /爆炸|爆炸性|H20[0-5]/],
+    ["健康危害", /致癌|靶器官|健康危害|窒息|H3\d{2}/],
+    ["环境危害", /环境|水生|H4\d{2}/],
   ] as const;
   return candidates.filter(([, pattern]) => pattern.test(hazards)).map(([label]) => label);
 }
 
-export const chemicals: Chemical[] = raw.chemicals["化学品安全数据"]
+const bundledChemicals: Chemical[] = raw.chemicals["化学品安全数据"]
   .slice(4)
   .filter((row) => row[1])
   .map((row) => {
@@ -97,6 +102,23 @@ export const chemicals: Chemical[] = raw.chemicals["化学品安全数据"]
       tags: hazardTags(hazards),
     };
   });
+
+function loadAndroidChemicals(fallback: Chemical[]): Chemical[] {
+  if (typeof window === "undefined") return fallback;
+  const bridge = (window as Window & {
+    AndroidBridge?: { getChemicalsJson?: () => string };
+  }).AndroidBridge;
+  if (!bridge?.getChemicalsJson) return fallback;
+  try {
+    const parsed = JSON.parse(bridge.getChemicalsJson()) as Chemical[];
+    return parsed.length === 1500 ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Android reads this array from the packaged SQLite database via the native bridge. */
+export const chemicals: Chemical[] = loadAndroidChemicals(bundledChemicals);
 
 export type EquipmentType = {
   category: string;
@@ -238,4 +260,4 @@ export const emergencyStepNames = [
   "监测恢复",
 ];
 
-export const dataVersion = "2026-07-13";
+export const dataVersion = "2026-07-18";

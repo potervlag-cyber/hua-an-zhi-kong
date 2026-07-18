@@ -35,3 +35,32 @@ test("contains four distinct emergency response profiles", async () => {
   assert.equal(new Set(rows.map((row) => row[7])).size, 4);
   assert.ok(rows.every((row) => row.length === 10 && row.every(Boolean)));
 });
+
+test("ships exactly 1500 chemicals and an APK SQLite database", async () => {
+  const source = JSON.parse(await readFile(new URL("../app/data/source-data.json", import.meta.url), "utf8"));
+  const rows = source.chemicals["化学品安全数据"].slice(4);
+  assert.equal(rows.length, 1500);
+  assert.deepEqual(rows.map((row) => row[0]), Array.from({ length: 1500 }, (_, index) => index + 1));
+  assert.ok(rows.slice(0, 100).every((row) => !String(row[22]).includes("安全参数未核验")));
+  assert.ok(rows.slice(100, 1000).every((row) => String(row[22]).includes("PubChem CID")));
+  const physchem = rows.slice(1000);
+  assert.equal(new Set(physchem.map((row) => row[3])).size, 500);
+  assert.ok(physchem.every((row) => /^\d{2,7}-\d{2}-\d$/.test(row[3])));
+  assert.ok(physchem.every((row) => String(row[22]).includes("PubChem Experimental Properties")));
+  assert.ok(physchem.every((row) => [row[6], row[7], row[8], row[9], row[10]].every((value) => !String(value).includes("未收录该项"))));
+
+  const generated = rows.slice(100);
+  const verified = generated.filter((row) => String(row[22]).includes("GHS核验状态：来源已核验"));
+  const partial = generated.filter((row) => String(row[22]).includes("GHS核验状态：部分核验"));
+  assert.equal(verified.length, 713);
+  assert.equal(partial.length, 4);
+  assert.ok(verified.every((row) => /\bH\d{3}\b/.test(row[11]) && String(row[22]).includes("来源数：")));
+
+  const safety = JSON.parse(await readFile(new URL("../db/pubchem-safety-1400.json", import.meta.url), "utf8"));
+  assert.equal(safety.complete, true);
+  assert.equal(safety.records.length, 1400);
+  assert.deepEqual(safety.statusCounts, { unavailable: 683, verified: 713, partial: 4 });
+
+  const database = await readFile(new URL("../android/assets/databases/chemicals.db", import.meta.url));
+  assert.equal(database.subarray(0, 16).toString("binary"), "SQLite format 3\0");
+});

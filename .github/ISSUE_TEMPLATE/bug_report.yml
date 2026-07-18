@@ -1,0 +1,28 @@
+name: Bug 报告
+description: 报告可复现的问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: 问题描述
+      description: 请说明实际结果与预期结果。
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 出现……
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: 运行环境
+      description: 浏览器或手机型号、Android 版本、应用版本。
+  - type: textarea
+    attributes:
+      label: 补充材料
+      description: 可附截图、日志或最小复现数据，请先删除敏感信息。
