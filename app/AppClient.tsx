@@ -501,6 +501,7 @@ function ChemicalCompare({ ids, onClose }: { ids: number[]; onClose: () => void 
 
 function InspectionModule({ history, setHistory, navigate }: { history: InspectionRecord[]; setHistory: (value: InspectionRecord[]) => void; navigate: (page: PageId) => void }) {
   const [equipment, setEquipment] = useState("反应釜");
+  const [equipmentQuery, setEquipmentQuery] = useState("");
   const [tag, setTag] = useState("R-101");
   const [inspector, setInspector] = useState("安全员");
   const [mobileStage, setMobileStage] = useState<"equipment" | "details" | "check">("equipment");
@@ -509,6 +510,8 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
   const [alertItem, setAlertItem] = useState<InspectionItem | null>(null);
   const [report, setReport] = useState<InspectionRecord | null>(null);
   const items = useMemo(() => inspectionItems.filter((item) => item.equipment === equipment), [equipment]);
+  const selectedEquipment = equipmentTypes.find((item) => item.name === equipment) ?? equipmentTypes[0];
+  const visibleEquipmentTypes = equipmentTypes.filter((item) => `${item.name}${item.category}${item.focus}${item.risks}`.toLowerCase().includes(equipmentQuery.toLowerCase()));
   const current = items[step];
   const answered = items.filter((item) => answers[item.id]?.status).length;
 
@@ -543,8 +546,8 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
   const selectEquipment = (value: string) => { setEquipment(value); setStep(0); setAnswers({}); showMobileStage("details"); };
   const exportReport = () => {
     if (!report) return;
-    const rows = [["设备名称", report.equipment], ["设备位号", report.tag], ["检查人员", report.inspector], ["检查时间", report.date], ["综合得分", report.score], ["风险等级", report.level], ["异常数量", report.abnormal], [], ["检查项目", "结果", "实测值/现场情况", "备注"]];
-    items.forEach((item) => rows.push([item.item, answers[item.id]?.status || "", answers[item.id]?.value || "", answers[item.id]?.note || ""]));
+    const rows = [["设备名称", report.equipment], ["设备位号", report.tag], ["检查人员", report.inspector], ["检查时间", report.date], ["综合得分", report.score], ["风险等级", report.level], ["异常数量", report.abnormal], [], ["检查项目", "检查方法", "正常判定标准", "结果", "实测值/现场情况", "备注", "异常后果", "建议处置", "检查频次", "责任角色"]];
+    items.forEach((item) => rows.push([item.item, item.method, item.standard, answers[item.id]?.status || "", answers[item.id]?.value || "", answers[item.id]?.note || "", item.consequence, item.action, item.frequency, item.role]));
     downloadText(`${report.tag}-巡检报告.csv`, `\ufeff${rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n")}`, "text/csv;charset=utf-8");
   };
 
@@ -552,13 +555,15 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
     <PageHeader eyebrow="EQUIPMENT INSPECTION" title="设备安全检查与风险评估" description="从设备类型开始，逐项完成现场检查；异常选择会即时触发风险提示。" actions={<button className="button button-outline" onClick={() => navigate("emergency")}>应急处置入口</button>} />
     <section className={`inspection-layout mobile-stage-${mobileStage}`}>
       <aside className="equipment-selector panel">
-        <div className="panel-head"><div><h2>选择设备</h2><p>{equipmentTypes.length} 类常用化工设备</p></div></div>
-        <div className="equipment-list">{equipmentTypes.map((item) => <button key={item.name} className={equipment === item.name ? "active" : ""} onClick={() => selectEquipment(item.name)}><span>{item.category.slice(0, 1)}</span><div><strong>{item.name}</strong><small>{item.count} 个检查项 · {item.category}</small></div><b>›</b></button>)}</div>
+        <div className="panel-head"><div><h2>选择设备</h2><p>{equipmentTypes.length} 类常用化工设备 · {inspectionItems.length} 条检查知识</p></div><label className="equipment-search"><span>⌕</span><input value={equipmentQuery} onChange={(event) => setEquipmentQuery(event.target.value)} placeholder="搜索设备、类别或风险" /></label></div>
+        <div className="equipment-list">{visibleEquipmentTypes.map((item) => <button key={item.name} className={equipment === item.name ? "active" : ""} onClick={() => selectEquipment(item.name)}><span>{item.category.slice(0, 1)}</span><div><strong>{item.name}</strong><small>{item.count} 个检查项 · {item.category}</small></div><b>›</b></button>)}</div>
+        {!visibleEquipmentTypes.length ? <div className="equipment-empty">未找到匹配设备，请尝试设备名称、类别或风险关键词。</div> : null}
       </aside>
       <div className="inspection-main">
         <section className="panel inspection-meta">
           <div className="inspection-mobile-only details-toolbar"><button onClick={() => showMobileStage("equipment")}>← 重新选择设备</button><span>设备信息 · 第 2/3 步</span></div>
           <div className="inspection-meta-fields"><label>设备名称<input value={equipment} readOnly /></label><label>设备位号<input value={tag} onChange={(event) => setTag(event.target.value)} /></label><label>检查人员<input value={inspector} onChange={(event) => setInspector(event.target.value)} /></label></div>
+          <div className="equipment-overview"><div><span>重点检查内容</span><p>{selectedEquipment.focus}</p></div><div className="danger"><span>典型主要风险</span><p>{selectedEquipment.risks}</p></div></div>
           <div className="progress-head"><span>巡检进度 <b>{answered}/{items.length}</b></span><strong>{items.length ? Math.round((answered / items.length) * 100) : 0}%</strong></div><div className="progress-bar"><i style={{ width: `${items.length ? answered / items.length * 100 : 0}%` }} /></div>
           <div className="inspection-mobile-only mobile-meta-actions"><button className="button button-primary" onClick={() => showMobileStage("check")}>开始分步检查 <span>→</span></button></div>
         </section>
@@ -566,7 +571,7 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
           <div className="inspection-mobile-only check-toolbar"><button onClick={() => showMobileStage("details")}>← 设备信息</button><span>分步检查 · 第 3/3 步</span></div>
           <div className="wizard-step"><span>步骤 {step + 1}</span><small>共 {items.length} 项</small><label className={`weight weight-${current.weight}`}>风险权重 {current.weight}</label></div>
           <h2>{current.item}</h2>
-          <div className="inspection-guidance"><div><span>检查方法</span><p>{current.method}</p></div><div><span>正常判定标准</span><p>{current.standard}</p></div></div>
+          <div className="inspection-guidance"><div><span>检查方法</span><p>{current.method}</p></div><div><span>正常判定标准</span><p>{current.standard}</p></div><div><span>建议检查频次</span><p>{current.frequency}</p></div><div><span>建议责任角色</span><p>{current.role}</p></div></div>
           <div className="status-picker"><label>现场判定</label><div>{([['normal','正常'],['abnormal','异常'],['na','不适用'],['review','待复核']] as Array<[InspectionStatus,string]>).map(([value, label]) => <button key={value} className={`${value} ${answers[current.id]?.status === value ? "active" : ""}`} onClick={() => updateAnswer(current, { status: value })}><i />{label}</button>)}</div></div>
           <div className="inspection-inputs"><label>实测值 / 现场情况<input placeholder="请输入实测值或现场情况" value={answers[current.id]?.value || ""} onChange={(event) => updateAnswer(current, { value: event.target.value })} /><ScrollingInspectionExample text={inspectionValuePlaceholder(current)} /></label><label>现场备注<textarea placeholder="补充设备状态、照片编号或异常描述" value={answers[current.id]?.note || ""} onChange={(event) => updateAnswer(current, { note: event.target.value })} /></label></div>
           {answers[current.id]?.status === "abnormal" && <div className="inline-risk"><span>!</span><div><strong>异常可能后果</strong><p>{current.consequence}</p><small>建议：{current.action}</small></div></div>}
@@ -613,7 +618,7 @@ function EmergencyModule() {
   const [scale, setScale] = useState("small");
   const [injury, setInjury] = useState(false);
   const [offsite, setOffsite] = useState(false);
-  const filtered = emergencyTypes.filter((item) => `${item.name}${item.category}${item.signs}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = emergencyTypes.filter((item) => `${item.name}${item.category}${item.signs}${item.risks}${item.scenario}${item.level}`.toLowerCase().includes(query.toLowerCase()));
   const baseResponseLevel = getBaseResponseLevel(selected.level);
   const assessedResponseLevel: ResponseLevel = injury || offsite || scale === "large" ? "红色" : scale === "medium" ? "橙色" : "蓝色";
   const responseLevel = maxResponseLevel(baseResponseLevel, assessedResponseLevel);
@@ -638,10 +643,10 @@ function EmergencyModule() {
     </nav>
     <div className="emergency-banner"><span>!</span><p><strong>安全边界</strong>普通人员仅执行报警、撤离、提醒、人员清点和可从安全位置完成的远程停机/关阀；堵漏、受限空间救援及进入有毒缺氧区域仅限专业队伍。</p></div>
     {stage === "select" ? <section className="emergency-selection-stage">
-      <aside className="panel accident-list"><div className="emergency-selection-head"><div><h2>选择事故类型</h2><p>{emergencyTypes.length} 类典型化工事故处置指导</p></div><div className="accident-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索事故类型或征兆" /></div></div><div className="accident-items">{filtered.map((item) => <button key={item.id} className={selected.id === item.id ? "active" : ""} onClick={() => selectType(item)}><i /><div><strong>{item.name}</strong><small>{item.category} · {item.level}</small><p>{item.scenario}</p></div><span>›</span></button>)}</div>{!filtered.length ? <div className="accident-empty">未找到匹配的事故类型，请尝试其他关键词。</div> : null}<div className="emergency-stage-actions"><div><small>当前选择</small><strong>{selected.name}</strong><span>{selected.category} · {selected.level}</span></div><button className="button button-danger" onClick={openAdvice}>确认事故，查看响应建议 →</button></div></aside>
+      <aside className="panel accident-list"><div className="emergency-selection-head"><div><h2>选择事故类型</h2><p>{emergencyTypes.length} 类典型化工事故 · 每类 6 阶段完整处置指导</p></div><div className="accident-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索事故、征兆、风险或场景" /></div></div><div className="accident-items">{filtered.map((item) => <button key={item.id} className={selected.id === item.id ? "active" : ""} onClick={() => selectType(item)}><i /><div><strong>{item.name}</strong><small>{item.category} · {item.level}</small><p>{item.scenario}</p></div><span>›</span></button>)}</div>{!filtered.length ? <div className="accident-empty">未找到匹配的事故类型，请尝试其他关键词。</div> : null}<div className="emergency-stage-actions"><div><small>当前选择</small><strong>{selected.name}</strong><span>{selected.category} · {selected.level}</span></div><button className="button button-danger" onClick={openAdvice}>确认事故，查看响应建议 →</button></div></aside>
     </section> : null}
     {stage === "advice" ? <section className="emergency-advice-stage"><div className="emergency-main">
-        <section className="panel incident-overview"><div className="incident-title"><div><p>{selected.category}</p><h2>{selected.name}</h2><span>{selected.scenario}</span></div><label className={`response-badge level-${responseLevel}`}>{responseLevel}响应建议</label></div><div className="incident-grid"><div><small>典型征兆</small><p>{selected.signs}</p></div><div><small>主要风险</small><p>{selected.risks}</p></div><div className="wide"><small>首要动作</small><p>{selected.steps[0]}</p></div></div></section>
+        <section className="panel incident-overview"><div className="incident-title"><div><p>{selected.category}</p><h2>{selected.name}</h2><span>{selected.scenario}</span></div><label className={`response-badge level-${responseLevel}`}>{responseLevel}响应建议</label></div><div className="incident-grid"><div><small>典型征兆</small><p>{selected.signs}</p></div><div><small>主要风险</small><p>{selected.risks}</p></div><div className="wide"><small>首要动作</small><p>{selected.steps[0]}</p></div><div className="wide incident-note"><small>适用说明与人员边界</small><p>{selected.note}</p></div></div></section>
         <section className="panel response-assessor"><div><h3>响应等级快速研判</h3><p>基础等级 {baseResponseLevel}；当前建议执行“{responseProfile.name}”。</p></div><label>事故规模<select value={scale} onChange={(event) => setScale(event.target.value)}><option value="small">少量 / 局部</option><option value="medium">持续 / 车间范围</option><option value="large">大量 / 装置范围</option></select></label><label className="switch-row"><input type="checkbox" checked={injury} onChange={(event) => setInjury(event.target.checked)} /><span>有人受伤</span></label><label className="switch-row"><input type="checkbox" checked={offsite} onChange={(event) => setOffsite(event.target.checked)} /><span>可能影响厂外</span></label><strong className={`response-badge level-${responseLevel}`}>{responseLevel}</strong></section>
         <section className={`panel level-guidance level-guidance-${responseLevel}`}>
           <div className="level-guidance-head"><div><small>当前等级的组织响应措施</small><h3>{responseProfile.name}</h3><p>{responseProfile.trigger}</p></div><span className={`response-badge level-${responseLevel}`}>{responseLevel}响应</span></div>
