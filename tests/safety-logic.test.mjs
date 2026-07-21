@@ -54,6 +54,15 @@ test("Android WebView and backup policies keep the native bridge local", async (
   assert.match(manifest, /android:allowBackup="false"/);
 });
 
+test("notification center exposes actionable local safety reminders", async () => {
+  const client = await readFile(new URL("../app/AppClient.tsx", import.meta.url), "utf8");
+  assert.match(client, /安全提醒中心/);
+  assert.match(client, /huazhi-read-safety-notices/);
+  assert.match(client, /全部已读/);
+  assert.match(client, /openNotice\(notice\)/);
+  assert.match(client, /navigate\(notice\.page\)/);
+});
+
 test("TypeScript and database builder use the same data version", async () => {
   const dataSource = await readFile(new URL("../app/data.ts", import.meta.url), "utf8");
   const match = dataSource.match(/export const dataVersion = "([^"]+)"/);
