@@ -14,6 +14,7 @@ const text = (value: Cell) => (value == null ? "" : String(value));
 
 export type RiskLevel = "unknown" | "low" | "medium" | "high" | "critical";
 export type ResponseLevel = "蓝色" | "黄色" | "橙色" | "红色";
+export const appVersion = "0.2.2";
 export const dataVersion = "2026-07-18";
 
 export type Chemical = {

@@ -13,7 +13,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
+import android.util.DisplayMetrics;
 import android.view.View;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -21,6 +23,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import org.json.JSONArray;
@@ -38,6 +41,7 @@ import java.util.Locale;
 
 public final class MainActivity extends Activity {
     private static final int REQUEST_CREATE_TEXT_FILE = 1201;
+    private static final float TOP_BLACK_BAR_HEIGHT_MM = 0.5f;
     private static final String CHEMICAL_DATABASE_ASSET = "databases/chemicals.db";
     private static final String CHEMICAL_DATABASE_NAME = "chemicals.db";
     private WebView webView;
@@ -47,6 +51,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        hideStatusBar();
 
         try {
             installChemicalDatabase();
@@ -54,7 +59,7 @@ public final class MainActivity extends Activity {
             Toast.makeText(this, "化学品数据库初始化失败", Toast.LENGTH_LONG).show();
         }
 
-        getWindow().setStatusBarColor(Color.rgb(9, 35, 74));
+        getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.rgb(9, 35, 74));
 
         webView = new WebView(this);
@@ -82,12 +87,52 @@ public final class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
 
-        setContentView(webView);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.BLACK);
+
+        View topBlackBar = new View(this);
+        topBlackBar.setBackgroundColor(Color.BLACK);
+        root.addView(topBlackBar, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            millimetersToPixels(TOP_BLACK_BAR_HEIGHT_MM)
+        ));
+        root.addView(webView, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1.0f
+        ));
+        setContentView(root);
         if (savedInstanceState == null) {
             webView.loadUrl("https://appassets.androidplatform.net/assets/www/mobile/index.html");
         } else {
             webView.restoreState(savedInstanceState);
         }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideStatusBar();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void hideStatusBar() {
+        getWindow().setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        );
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    private int millimetersToPixels(float millimeters) {
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        float verticalDpi = metrics.ydpi > 0 ? metrics.ydpi : DisplayMetrics.DENSITY_DEFAULT;
+        return Math.max(1, Math.round(millimeters * verticalDpi / 25.4f));
     }
 
     @Override

@@ -18,7 +18,7 @@ SOURCE = ROOT / "app" / "data" / "source-data.json"
 OUTPUT = ROOT / "db" / "pubchem-safety-1400.json"
 WORKERS = 4
 MIN_REQUEST_INTERVAL = 0.28
-USER_AGENT = "HuaAnZhiKong/0.2.0 safety-verification-builder"
+USER_AGENT = "HuaAnZhiKong/0.2.2 safety-verification-builder"
 AUTHORITATIVE_SOURCE_MARKERS = (
     "regulation (ec) no 1272/2008",
     "european chemicals agency",

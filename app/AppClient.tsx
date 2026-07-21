@@ -7,6 +7,7 @@ import {
   InspectionItem,
   ResponseLevel,
   RiskLevel,
+  appVersion,
   chemicals,
   dataVersion,
   emergencyStepNames,
@@ -48,6 +49,14 @@ type InspectionRecord = {
   level: string;
   abnormal: number;
   items?: InspectionRecordItem[];
+};
+type SafetyNotice = {
+  id: string;
+  title: string;
+  description: string;
+  action: string;
+  page: PageId;
+  tone: "danger" | "warning" | "info";
 };
 
 declare global {
@@ -165,6 +174,9 @@ function inspectionValuePlaceholder(item: InspectionItem) {
 
 const isNumberArray = (value: unknown): value is number[] =>
   Array.isArray(value) && value.every((item) => Number.isSafeInteger(item));
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
 
 const isInspectionHistory = (value: unknown): value is InspectionRecord[] =>
   Array.isArray(value) && value.every((item) => {
@@ -301,6 +313,122 @@ function EmptyState({ title, text }: { title: string; text: string }) {
   return <div className="empty-state"><span>⌕</span><h3>{title}</h3><p>{text}</p></div>;
 }
 
+function NotificationCenter({ history, navigate }: { history: InspectionRecord[]; navigate: (page: PageId) => void }) {
+  const [open, setOpen] = useState(false);
+  const [readIds, setReadIds] = usePersistentState<string[]>("huazhi-read-safety-notices", [], isStringArray);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const notices = useMemo<SafetyNotice[]>(() => {
+    const criticalCount = chemicals.filter((chemical) => chemical.risk === "critical").length;
+    const unverifiedCount = chemicals.filter((chemical) => chemical.risk === "unknown").length;
+    const latest = history[0];
+    const inspectionNotice: SafetyNotice = !latest
+      ? {
+          id: "inspection-empty",
+          title: "尚无本机巡检报告",
+          description: "建议选择一类设备完成首次分步巡检，建立可追溯的本机记录。",
+          action: "发起设备巡检",
+          page: "inspection",
+          tone: "warning",
+        }
+      : latest.abnormal > 0
+        ? {
+            id: `inspection-${latest.id}-${latest.abnormal}`,
+            title: "最近巡检发现异常",
+            description: `${latest.equipment}${latest.tag ? `（${latest.tag}）` : ""}有 ${latest.abnormal} 项异常，建议复核处置措施。`,
+            action: "查看巡检记录",
+            page: "inspection",
+            tone: "danger",
+          }
+        : {
+            id: `inspection-${latest.id}-normal`,
+            title: "最新巡检已完成",
+            description: `${latest.equipment}${latest.tag ? `（${latest.tag}）` : ""}未记录异常，可按计划安排下一次巡检。`,
+            action: "查看巡检记录",
+            page: "inspection",
+            tone: "info",
+          };
+
+    return [
+      {
+        id: `critical-chemicals-${criticalCount}-${dataVersion}`,
+        title: "重大风险物质需要关注",
+        description: `离线库中有 ${criticalCount} 种重大风险物质，操作前应核对最新版 SDS 与现场控制措施。`,
+        action: "打开化学品查询",
+        page: "chemicals",
+        tone: "danger",
+      },
+      {
+        id: `unverified-chemicals-${unverifiedCount}-${dataVersion}`,
+        title: "部分安全数据待核验",
+        description: `当前有 ${unverifiedCount} 种化学品标记为安全数据待核验，不应据此直接制定作业方案。`,
+        action: "查看安全数据",
+        page: "chemicals",
+        tone: "warning",
+      },
+      inspectionNotice,
+    ];
+  }, [history]);
+  const unreadCount = notices.filter((notice) => !readIds.includes(notice.id)).length;
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  const openNotice = (notice: SafetyNotice) => {
+    if (!readIds.includes(notice.id)) setReadIds([...readIds, notice.id]);
+    setOpen(false);
+    navigate(notice.page);
+  };
+
+  return (
+    <div className="notification-center" ref={rootRef}>
+      <button
+        className={`notification-button ${open ? "active" : ""}`}
+        aria-label={`安全提醒，${unreadCount} 条未读`}
+        aria-expanded={open}
+        aria-controls="safety-notification-panel"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="notification-bell" aria-hidden="true" />
+        {unreadCount > 0 && <span className="notification-count" aria-hidden="true">{unreadCount}</span>}
+      </button>
+      {open && (
+        <section id="safety-notification-panel" className="notification-popover" aria-label="安全提醒中心">
+          <div className="notification-head">
+            <div><strong>安全提醒中心</strong><small>{unreadCount ? `${unreadCount} 条未读提醒` : "提醒已全部阅读"}</small></div>
+            <button onClick={() => setReadIds(notices.map((notice) => notice.id))} disabled={!unreadCount}>全部已读</button>
+          </div>
+          <div className="notification-list">
+            {notices.map((notice) => {
+              const unread = !readIds.includes(notice.id);
+              return (
+                <button key={notice.id} className={unread ? "unread" : ""} onClick={() => openNotice(notice)}>
+                  <span className={`notification-tone ${notice.tone}`} aria-hidden="true">{notice.tone === "danger" ? "!" : notice.tone === "warning" ? "△" : "✓"}</span>
+                  <span className="notification-copy"><strong>{notice.title}</strong><p>{notice.description}</p><small>{notice.action} →</small></span>
+                  {unread && <i aria-label="未读" />}
+                </button>
+              );
+            })}
+          </div>
+          <p className="notification-foot">提醒依据本机离线数据生成，不替代现场报警、SDS、作业许可和专业判断。</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function AppClient() {
   const [page, setPage] = useState<PageId>("home");
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -341,7 +469,7 @@ export default function AppClient() {
         </nav>
         <div className="sidebar-foot">
           <div className="system-dot"><i />系统离线数据可用</div>
-          <small>数据版本 {dataVersion}</small>
+          <small>应用版本 {appVersion} · 数据版本 {dataVersion}</small>
         </div>
       </aside>
 
@@ -351,7 +479,7 @@ export default function AppClient() {
           <div className="breadcrumb"><span>化安智控</span><b>/</b>{navItems.find((item) => item.id === page)?.label}</div>
           <div className="topbar-actions">
             <div className="sync-pill"><i /> 本地知识库已同步</div>
-            <button className="notification-button" aria-label="风险提醒">●<span>2</span></button>
+            <NotificationCenter history={inspectionHistory} navigate={navigate} />
             <div className="avatar">安</div>
           </div>
         </header>

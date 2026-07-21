@@ -47,7 +47,20 @@ test("Android WebView and backup policies keep the native bridge local", async (
   assert.match(java, /shouldOverrideUrlLoading\(WebView view, WebResourceRequest request\)/);
   assert.match(java, /TRUSTED_WEB_PREFIX = "\/assets\/www\/"/);
   assert.match(java, /Intent\.ACTION_VIEW/);
+  assert.match(java, /TOP_BLACK_BAR_HEIGHT_MM = 0\.5f/);
+  assert.match(java, /WindowManager\.LayoutParams\.FLAG_FULLSCREEN/);
+  assert.doesNotMatch(java, /WindowInsetsController/);
+  assert.match(java, /millimetersToPixels\(TOP_BLACK_BAR_HEIGHT_MM\)/);
   assert.match(manifest, /android:allowBackup="false"/);
+});
+
+test("notification center exposes actionable local safety reminders", async () => {
+  const client = await readFile(new URL("../app/AppClient.tsx", import.meta.url), "utf8");
+  assert.match(client, /安全提醒中心/);
+  assert.match(client, /huazhi-read-safety-notices/);
+  assert.match(client, /全部已读/);
+  assert.match(client, /openNotice\(notice\)/);
+  assert.match(client, /navigate\(notice\.page\)/);
 });
 
 test("TypeScript and database builder use the same data version", async () => {
@@ -60,6 +73,14 @@ test("TypeScript and database builder use the same data version", async () => {
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(match[1], result.stdout.trim());
+});
+
+test("visible app version matches package metadata", async () => {
+  const dataSource = await readFile(new URL("../app/data.ts", import.meta.url), "utf8");
+  const packageMetadata = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const match = dataSource.match(/export const appVersion = "([^"]+)"/);
+  assert.ok(match, "app/data.ts must export a literal appVersion");
+  assert.equal(match[1], packageMetadata.version);
 });
 
 test("packaged SQLite risk values match the shared source classifier", () => {
