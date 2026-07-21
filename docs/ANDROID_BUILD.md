@@ -24,7 +24,7 @@ APK 输出到 `outputs/`。版本名称默认读取 `package.json`，也可以�
 ```powershell
 powershell -ExecutionPolicy Bypass -File android/build-apk.ps1 `
   -VersionName "0.2.1" `
-  -VersionCode 12 `
+  -VersionCode 13 `
   -OutputName "HuaAnZhiKong-v0.2.1-debug.apk"
 ```
 

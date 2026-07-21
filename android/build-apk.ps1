@@ -1,6 +1,6 @@
 param(
     [string]$OutputName = "",
-    [int]$VersionCode = 12,
+    [int]$VersionCode = 13,
     [string]$VersionName = ""
 )
 
