@@ -23,9 +23,9 @@ APK 输出到 `outputs/`。版本名称默认读取 `package.json`，也可以�
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File android/build-apk.ps1 `
-  -VersionName "0.2.0" `
-  -VersionCode 11 `
-  -OutputName "HuaAnZhiKong-v0.2.0-debug.apk"
+  -VersionName "0.2.1" `
+  -VersionCode 12 `
+  -OutputName "HuaAnZhiKong-v0.2.1-debug.apk"
 ```
 
 构建脚本会把 `android/assets/databases/chemicals.db` 作为 `assets/databases/chemicals.db` 原样放入 APK。可在构建前运行以下命令重建并校验数据库：

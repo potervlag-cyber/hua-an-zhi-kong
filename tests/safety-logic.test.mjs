@@ -47,6 +47,9 @@ test("Android WebView and backup policies keep the native bridge local", async (
   assert.match(java, /shouldOverrideUrlLoading\(WebView view, WebResourceRequest request\)/);
   assert.match(java, /TRUSTED_WEB_PREFIX = "\/assets\/www\/"/);
   assert.match(java, /Intent\.ACTION_VIEW/);
+  assert.match(java, /TOP_BLACK_BAR_HEIGHT_MM = 0\.5f/);
+  assert.match(java, /controller\.hide\(WindowInsets\.Type\.statusBars\(\)\)/);
+  assert.match(java, /millimetersToPixels\(TOP_BLACK_BAR_HEIGHT_MM\)/);
   assert.match(manifest, /android:allowBackup="false"/);
 });
 
