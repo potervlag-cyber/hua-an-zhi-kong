@@ -75,6 +75,14 @@ test("TypeScript and database builder use the same data version", async () => {
   assert.equal(match[1], result.stdout.trim());
 });
 
+test("visible app version matches package metadata", async () => {
+  const dataSource = await readFile(new URL("../app/data.ts", import.meta.url), "utf8");
+  const packageMetadata = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const match = dataSource.match(/export const appVersion = "([^"]+)"/);
+  assert.ok(match, "app/data.ts must export a literal appVersion");
+  assert.equal(match[1], packageMetadata.version);
+});
+
 test("packaged SQLite risk values match the shared source classifier", () => {
   const script = String.raw`
 import json, runpy, sqlite3

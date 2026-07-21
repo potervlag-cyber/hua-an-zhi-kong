@@ -7,6 +7,7 @@ import {
   InspectionItem,
   ResponseLevel,
   RiskLevel,
+  appVersion,
   chemicals,
   dataVersion,
   emergencyStepNames,
@@ -468,7 +469,7 @@ export default function AppClient() {
         </nav>
         <div className="sidebar-foot">
           <div className="system-dot"><i />系统离线数据可用</div>
-          <small>数据版本 {dataVersion}</small>
+          <small>应用版本 {appVersion} · 数据版本 {dataVersion}</small>
         </div>
       </aside>
 

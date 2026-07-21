@@ -26,7 +26,7 @@ TARGET = 500
 CAS_PAGES = 2
 WORKERS = 4
 MIN_REQUEST_INTERVAL = 0.27
-USER_AGENT = "HuaAnZhiKong/0.2.0 offline-dataset-builder"
+USER_AGENT = "HuaAnZhiKong/0.2.2 offline-dataset-builder"
 
 _rate_lock = threading.Lock()
 _last_request = 0.0

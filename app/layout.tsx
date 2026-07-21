@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: "/manifest.webmanifest",
     themeColor: "#09234a",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title, description, type: "website", url: baseUrl, images: [{ url: new URL("/og.png", baseUrl), width: 1672, height: 941, alt: "化安智控 0.2.0 安全数据概览" }] },
+    openGraph: { title, description, type: "website", url: baseUrl, images: [{ url: new URL("/og.png", baseUrl), width: 1672, height: 941, alt: "化安智控 0.2.2 安全数据概览" }] },
     twitter: { card: "summary_large_image", title, description, images: [new URL("/og.png", baseUrl)] },
   };
 }
