@@ -50,7 +50,8 @@ next-env.d.ts
 /dist-android/
 /android/build/
 /.wrangler/
-/outputs/
+/outputs/*
+!/outputs/化安智控.apk
 /work/
 /.npm-cache/
 /.pnpm-store/

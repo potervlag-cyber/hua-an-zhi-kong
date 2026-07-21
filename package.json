@@ -12,7 +12,7 @@
     "build:apk": "powershell -ExecutionPolicy Bypass -File android/build-apk.ps1",
     "db:build": "python scripts/build-chemical-database.py",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/safety-logic.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-android --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

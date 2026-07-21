@@ -15,10 +15,29 @@ import {
   inspectionItems,
   responseProfiles,
 } from "./data";
+import {
+  MAX_SIMULATION_POINTS,
+  csvCell,
+  inspectionRiskLevel,
+  simulationPointCount,
+} from "./safety-logic";
 
 type PageId = "home" | "chemicals" | "inspection" | "emergency" | "cleaner" | "simulation";
 type InspectionStatus = "normal" | "abnormal" | "na" | "review";
-type InspectionAnswer = { status: InspectionStatus; value: string; note: string };
+type InspectionAnswer = { status?: InspectionStatus; value: string; note: string };
+type InspectionRecordItem = {
+  id: number;
+  item: string;
+  method: string;
+  standard: string;
+  result: InspectionStatus | "";
+  value: string;
+  note: string;
+  consequence: string;
+  action: string;
+  frequency: string;
+  role: string;
+};
 type InspectionRecord = {
   id: string;
   equipment: string;
@@ -28,6 +47,7 @@ type InspectionRecord = {
   score: number;
   level: string;
   abnormal: number;
+  items?: InspectionRecordItem[];
 };
 
 declare global {
@@ -143,20 +163,44 @@ function inspectionValuePlaceholder(item: InspectionItem) {
   return inspectionValueExamples[item.id] ?? `例如：${item.equipment}—${item.item.replace(/[？?]/g, "")}，现场检查正常`;
 }
 
-function usePersistentState<T>(key: string, initialValue: T) {
+const isNumberArray = (value: unknown): value is number[] =>
+  Array.isArray(value) && value.every((item) => Number.isSafeInteger(item));
+
+const isInspectionHistory = (value: unknown): value is InspectionRecord[] =>
+  Array.isArray(value) && value.every((item) => {
+    if (!item || typeof item !== "object") return false;
+    const record = item as Partial<InspectionRecord>;
+    return typeof record.id === "string"
+      && typeof record.equipment === "string"
+      && typeof record.tag === "string"
+      && typeof record.inspector === "string"
+      && typeof record.date === "string"
+      && typeof record.score === "number"
+      && Number.isFinite(record.score)
+      && typeof record.level === "string"
+      && typeof record.abnormal === "number"
+      && (record.items === undefined || Array.isArray(record.items));
+  });
+
+function usePersistentState<T>(key: string, initialValue: T, isValid: (value: unknown) => value is T) {
   const [value, setValue] = useState<T>(initialValue);
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(key);
-      // Browser storage must be restored after hydration to keep SSR markup stable.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved) setValue(JSON.parse(saved) as T);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (isValid(parsed)) {
+          // Browser storage must be restored after hydration to keep SSR markup stable.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setValue(parsed);
+        } else window.localStorage.removeItem(key);
+      }
     } catch {
       // Device-local history is optional; the app remains usable without it.
     }
     setReady(true);
-  }, [key]);
+  }, [isValid, key]);
   useEffect(() => {
     if (!ready) return;
     try {
@@ -260,14 +304,17 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 export default function AppClient() {
   const [page, setPage] = useState<PageId>("home");
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [recentChemicals, setRecentChemicals] = usePersistentState<number[]>("huazhi-recent-chemicals", [1, 4, 8]);
-  const [inspectionHistory, setInspectionHistory] = usePersistentState<InspectionRecord[]>("huazhi-inspection-history", []);
+  const [recentChemicals, setRecentChemicals] = usePersistentState<number[]>("huazhi-recent-chemicals", [1, 4, 8], isNumberArray);
+  const [inspectionHistory, setInspectionHistory] = usePersistentState<InspectionRecord[]>("huazhi-inspection-history", [], isInspectionHistory);
 
   useEffect(() => {
-    const fromHash = window.location.hash.replace("#", "") as PageId;
-    // URL state is browser-only and is intentionally restored after hydration.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (navItems.some((item) => item.id === fromHash)) setPage(fromHash);
+    const syncPageFromHash = () => {
+      const fromHash = window.location.hash.replace("#", "") as PageId;
+      setPage(navItems.some((item) => item.id === fromHash) ? fromHash : "home");
+    };
+    syncPageFromHash();
+    window.addEventListener("hashchange", syncPageFromHash);
+    return () => window.removeEventListener("hashchange", syncPageFromHash);
   }, []);
 
   const navigate = (next: PageId) => {
@@ -399,7 +446,7 @@ function ChemicalModule({ recentIds, setRecentIds, navigate }: { recentIds: numb
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("全部");
   const [selected, setSelected] = useState<Chemical | null>(null);
-  const [favorites, setFavorites] = usePersistentState<number[]>("huazhi-favorite-chemicals", []);
+  const [favorites, setFavorites] = usePersistentState<number[]>("huazhi-favorite-chemicals", [], isNumberArray);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [visibleCount, setVisibleCount] = useState(60);
@@ -480,7 +527,7 @@ function ChemicalDrawer({ chemical, favorite, onFavorite, onClose, navigate }: {
         <InfoBlock title="灭火方式" text={chemical.firefighting} />
         <InfoBlock title="禁忌物质" tone="danger" text={chemical.incompatibilities} />
         <InfoBlock title="数据核验与来源" text={chemical.note} />
-        <div className="source-links"><strong>数据来源</strong><a href={chemical.pubchem} target="_blank">PubChem ↗</a><a href={chemical.icsc} target="_blank">ICSC ↗</a></div>
+        <div className="source-links"><strong>数据来源</strong><a href={chemical.pubchem} target="_blank" rel="noopener noreferrer">PubChem ↗</a><a href={chemical.icsc} target="_blank" rel="noopener noreferrer">ICSC ↗</a></div>
         <div className="drawer-warning"><span>!</span><p>以上为典型参考值。混合物、浓度、纯度与温压会改变数据，操作前必须核对具体产品 SDS。</p></div>
         <button className="button button-danger full" onClick={() => { onClose(); navigate("emergency"); }}>发生事故？进入应急处置指导 →</button>
       </aside>
@@ -494,9 +541,9 @@ function InfoBlock({ title, text, tone = "default" }: { title: string; text: str
 
 function ChemicalCompare({ ids, onClose }: { ids: number[]; onClose: () => void }) {
   const items = ids.map((id) => chemicals.find((chemical) => chemical.id === id)).filter(Boolean) as Chemical[];
-  const incompatibilityWarning = items.length === 2 && [items[0].incompatibilities, items[1].incompatibilities].some((value) => /氧化剂|强酸|强碱|过氧化物/.test(value));
+  const hasReactiveKeyword = items.length === 2 && [items[0].incompatibilities, items[1].incompatibilities].some((value) => /氧化剂|强酸|强碱|过氧化物/.test(value));
   const rows: Array<[string, keyof Chemical]> = [["CAS号", "cas"], ["分子式", "formula"], ["主要危险", "hazards"], ["闪点", "flashPoint"], ["爆炸极限", "explosiveLimits"], ["储存要求", "storage"], ["禁忌物质", "incompatibilities"]];
-  return <Modal title="化学品安全对比" onClose={onClose}>{incompatibilityWarning && <div className="compare-warning">! 两种物质均涉及强反应性禁忌物，混存或混合前必须进行专项相容性评估。</div>}<div className="compare-table"><div className="compare-row header"><span>对比项目</span>{items.map((item) => <strong key={item.id}>{item.name}<small>{riskMeta[item.risk].label}</small></strong>)}</div>{rows.map(([label, key]) => <div className="compare-row" key={label}><span>{label}</span>{items.map((item) => <p key={item.id}>{String(item[key]) || "—"}</p>)}</div>)}</div></Modal>;
+  return <Modal title="化学品安全对比" onClose={onClose}><div className="compare-warning">! {hasReactiveKeyword ? "至少一种物质的禁忌字段涉及强反应性物质。" : "当前仅并列展示禁忌字段，未进行配对相容性判定。"}混存或混合前必须核对双方最新版 SDS 并完成专项相容性评估。</div><div className="compare-table"><div className="compare-row header"><span>对比项目</span>{items.map((item) => <strong key={item.id}>{item.name}<small>{riskMeta[item.risk].label}</small></strong>)}</div>{rows.map(([label, key]) => <div className="compare-row" key={label}><span>{label}</span>{items.map((item) => <p key={item.id}>{String(item[key]) || "—"}</p>)}</div>)}</div></Modal>;
 }
 
 function InspectionModule({ history, setHistory, navigate }: { history: InspectionRecord[]; setHistory: (value: InspectionRecord[]) => void; navigate: (page: PageId) => void }) {
@@ -516,7 +563,7 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
   const answered = items.filter((item) => answers[item.id]?.status).length;
 
   const updateAnswer = (item: InspectionItem, patch: Partial<InspectionAnswer>) => {
-    const previous = answers[item.id] ?? { status: "normal", value: "", note: "" };
+    const previous = answers[item.id] ?? { value: "", note: "" };
     const next = { ...previous, ...patch } as InspectionAnswer;
     setAnswers({ ...answers, [item.id]: next });
     if (patch.status === "abnormal") setAlertItem(item);
@@ -531,12 +578,29 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
     }, 0);
     return Math.round(base * (1 + Math.max(0, abnormalItems.length - 1) * 0.1));
   }, [answers, items]);
-  const level = score >= 40 ? "重大风险" : score >= 26 ? "较高风险" : score >= 11 ? "一般风险" : "低风险";
+  const hasCriticalAbnormal = items.some((item) => item.weight >= 5 && answers[item.id]?.status === "abnormal");
+  const hasCriticalReview = items.some((item) => item.weight >= 5 && answers[item.id]?.status === "review");
+  const level = inspectionRiskLevel(score, hasCriticalAbnormal, hasCriticalReview);
+  const levelTone = level === "重大风险" ? "red" : level === "较高风险" ? "orange" : level === "一般风险" ? "yellow" : "green";
 
   const submitReport = () => {
     if (answered < items.length) { window.alert(`还有 ${items.length - answered} 项未完成判定。`); return; }
+    if (!tag.trim() || !inspector.trim()) { window.alert("设备位号和检查人员不能为空。"); return; }
     if (!window.confirm(`确认提交 ${equipment}（${tag}）巡检报告？提交后将保存到本机记录。`)) return;
-    const record: InspectionRecord = { id: `${Date.now()}`, equipment, tag, inspector, date: new Date().toLocaleString("zh-CN"), score, level, abnormal: items.filter((item) => answers[item.id]?.status === "abnormal").length };
+    const recordItems: InspectionRecordItem[] = items.map((item) => ({
+      id: item.id,
+      item: item.item,
+      method: item.method,
+      standard: item.standard,
+      result: answers[item.id]?.status ?? "",
+      value: answers[item.id]?.value ?? "",
+      note: answers[item.id]?.note ?? "",
+      consequence: item.consequence,
+      action: item.action,
+      frequency: item.frequency,
+      role: item.role,
+    }));
+    const record: InspectionRecord = { id: `${Date.now()}`, equipment, tag: tag.trim(), inspector: inspector.trim(), date: new Date().toLocaleString("zh-CN"), score, level, abnormal: items.filter((item) => answers[item.id]?.status === "abnormal").length, items: recordItems };
     setHistory([record, ...history]); setReport(record);
   };
   const showMobileStage = (stage: "equipment" | "details" | "check") => {
@@ -547,8 +611,9 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
   const exportReport = () => {
     if (!report) return;
     const rows = [["设备名称", report.equipment], ["设备位号", report.tag], ["检查人员", report.inspector], ["检查时间", report.date], ["综合得分", report.score], ["风险等级", report.level], ["异常数量", report.abnormal], [], ["检查项目", "检查方法", "正常判定标准", "结果", "实测值/现场情况", "备注", "异常后果", "建议处置", "检查频次", "责任角色"]];
-    items.forEach((item) => rows.push([item.item, item.method, item.standard, answers[item.id]?.status || "", answers[item.id]?.value || "", answers[item.id]?.note || "", item.consequence, item.action, item.frequency, item.role]));
-    downloadText(`${report.tag}-巡检报告.csv`, `\ufeff${rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n")}`, "text/csv;charset=utf-8");
+    const reportItems = report.items ?? items.map((item) => ({ id: item.id, item: item.item, method: item.method, standard: item.standard, result: answers[item.id]?.status ?? "", value: answers[item.id]?.value ?? "", note: answers[item.id]?.note ?? "", consequence: item.consequence, action: item.action, frequency: item.frequency, role: item.role }));
+    reportItems.forEach((item) => rows.push([item.item, item.method, item.standard, item.result, item.value, item.note, item.consequence, item.action, item.frequency, item.role]));
+    downloadText(`${report.tag}-巡检报告.csv`, `\ufeff${rows.map((row) => row.map(csvCell).join(",")).join("\n")}`, "text/csv;charset=utf-8");
   };
 
   return <div className="page inspection-page">
@@ -577,11 +642,11 @@ function InspectionModule({ history, setHistory, navigate }: { history: Inspecti
           {answers[current.id]?.status === "abnormal" && <div className="inline-risk"><span>!</span><div><strong>异常可能后果</strong><p>{current.consequence}</p><small>建议：{current.action}</small></div></div>}
           <div className="wizard-actions"><button className="button button-outline" disabled={step === 0} onClick={() => setStep((value) => value - 1)}>← 上一步</button>{step < items.length - 1 ? <button className="button button-primary" onClick={() => setStep((value) => value + 1)}>下一项 →</button> : <button className="button button-primary" onClick={submitReport}>提交巡检报告</button>}</div>
         </section> : <EmptyState title="此设备暂无检查项" text="请在知识库中新增对应检查内容" />}
-        <section className="risk-summary"><div><small>实时风险得分</small><strong>{score}</strong></div><div><small>当前风险等级</small><strong className={score >= 40 ? "red" : score >= 26 ? "orange" : score >= 11 ? "yellow" : "green"}>{level}</strong></div><div><small>异常 / 待复核</small><strong>{items.filter((item) => answers[item.id]?.status === "abnormal").length} / {items.filter((item) => answers[item.id]?.status === "review").length}</strong></div><p>得分 = 风险权重 × 异常严重度 × 异常数量修正系数</p></section>
+        <section className="risk-summary"><div><small>实时风险得分</small><strong>{score}</strong></div><div><small>当前风险等级</small><strong className={levelTone}>{level}</strong></div><div><small>异常 / 待复核</small><strong>{items.filter((item) => answers[item.id]?.status === "abnormal").length} / {items.filter((item) => answers[item.id]?.status === "review").length}</strong></div><p>得分 = 风险权重 × 异常严重度 × 异常数量修正系数；重大异常直接按重大风险提示</p></section>
       </div>
     </section>
     {alertItem && <Modal title="检测到设备异常" tone="danger" onClose={() => setAlertItem(null)}><div className="abnormal-modal"><div className="danger-symbol">!</div><h3>{alertItem.item}</h3><div><strong>可能造成的后果</strong><p>{alertItem.consequence}</p></div><div><strong>建议立即采取</strong><p>{alertItem.action}</p></div><ul><li className={alertItem.weight >= 5 ? "yes" : ""}>是否建议停止设备：{alertItem.weight >= 5 ? "是，按规程紧急停车" : "根据现场条件与规程判断"}</li><li className="yes">是否上报负责人：是</li><li>是否启动应急流程：持续恶化、泄漏或联锁失效时立即启动</li></ul><button className="button button-danger full" onClick={() => setAlertItem(null)}>确认已知晓风险</button></div></Modal>}
-    {report && <Modal title="巡检风险报告" onClose={() => setReport(null)}><div className="report-summary"><div className={`report-grade ${report.score >= 40 ? "red" : report.score >= 26 ? "orange" : report.score >= 11 ? "yellow" : "green"}`}><span>{report.score}</span><strong>{report.level}</strong></div><div className="report-details"><p><span>设备</span><b>{report.equipment} · {report.tag}</b></p><p><span>检查人员</span><b>{report.inspector}</b></p><p><span>检查时间</span><b>{report.date}</b></p><p><span>异常项</span><b>{report.abnormal} 项</b></p></div></div><div className="modal-actions"><button className="button button-outline" onClick={printPage}>打印 / 导出 PDF</button><button className="button button-primary" onClick={exportReport}>导出 Excel 兼容 CSV</button></div></Modal>}
+    {report && <Modal title="巡检风险报告" onClose={() => setReport(null)}><div className="report-summary"><div className={`report-grade ${report.level === "重大风险" ? "red" : report.level === "较高风险" ? "orange" : report.level === "一般风险" ? "yellow" : "green"}`}><span>{report.score}</span><strong>{report.level}</strong></div><div className="report-details"><p><span>设备</span><b>{report.equipment} · {report.tag}</b></p><p><span>检查人员</span><b>{report.inspector}</b></p><p><span>检查时间</span><b>{report.date}</b></p><p><span>异常项</span><b>{report.abnormal} 项</b></p></div></div><div className="modal-actions"><button className="button button-outline" onClick={printPage}>打印 / 导出 PDF</button><button className="button button-primary" onClick={exportReport}>导出 Excel 兼容 CSV</button></div></Modal>}
   </div>;
 }
 
@@ -623,6 +688,7 @@ function EmergencyModule() {
   const assessedResponseLevel: ResponseLevel = injury || offsite || scale === "large" ? "红色" : scale === "medium" ? "橙色" : "蓝色";
   const responseLevel = maxResponseLevel(baseResponseLevel, assessedResponseLevel);
   const responseProfile = responseProfiles[responseLevel];
+  const allEmergencyStepsCompleted = selected.steps.every((_, index) => completed.includes(index));
   const startFlow = () => { if (window.confirm(`确认启动“${selected.name}”应急指导？真实事故必须同时服从现场指挥和企业预案。`)) { setStarted(true); setStep(0); setCompleted([]); } };
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
   const showStage = (nextStage: EmergencyStage) => { setStage(nextStage); scrollToTop(); };
@@ -664,7 +730,7 @@ function EmergencyModule() {
         <div className="emergency-stage-actions advice-actions"><button className="button button-outline" onClick={() => showStage("select")}>← 返回选择事故</button><button className="button button-danger" onClick={openFlow}>确认建议，进入应急流程 →</button></div>
       </div></section> : null}
     {stage === "flow" ? <section className="emergency-flow-stage"><div className="emergency-flow-context"><div><small>当前事故</small><strong>{selected.name}</strong><span>{selected.category} · {responseLevel}响应</span></div><button onClick={openAdvice}>查看响应建议</button></div>
-      {started ? <section className="panel emergency-wizard"><div className="emergency-progress">{selected.steps.map((_, index) => <button key={index} className={`${step === index ? "active" : ""} ${completed.includes(index) ? "done" : ""}`} onClick={() => setStep(index)}><span>{completed.includes(index) ? "✓" : index + 1}</span><small>{emergencyStepNames[index]}</small></button>)}</div><div className="emergency-step-content"><div className="step-number">STEP {step + 1}</div><h2>{emergencyStepNames[step]}</h2><p className="main-action">{selected.steps[step]}</p><div className="emergency-detail-grid"><div className="prohibit"><strong>禁止操作</strong><p>{selected.prohibited}</p></div><div><strong>所需防护</strong><p>{selected.ppe}</p></div><div><strong>升级条件</strong><p>{selected.escalation}</p></div><div><strong>恢复条件</strong><p>{selected.recovery}</p></div></div><div className="wizard-actions"><button className="button button-outline" disabled={step === 0} onClick={() => setStep((value) => value - 1)}>← 上一步</button><label className="complete-check"><input type="checkbox" checked={completed.includes(step)} onChange={(event) => setCompleted(event.target.checked ? [...completed, step] : completed.filter((value) => value !== step))} />当前步骤已完成</label>{step < selected.steps.length - 1 ? <button className="button button-danger" onClick={() => setStep((value) => value + 1)}>下一步 →</button> : <button className="button button-primary" onClick={() => window.alert("流程记录完成。恢复生产前必须完成检测、完整性确认与批准。")}>完成并记录</button>}</div></div></section> : <section className="panel flow-preview"><div><span className="preview-symbol">!</span><h2>准备启动分步应急流程</h2><p>系统将按 6 个阶段逐步展示操作、禁忌、防护和升级条件。</p><button className="button button-danger" onClick={startFlow}>二次确认并启动</button></div><ol>{selected.steps.map((content, index) => <li key={content}><span>{index + 1}</span><div><strong>{emergencyStepNames[index]}</strong><p>{content}</p></div></li>)}</ol></section>}
+      {started ? <section className="panel emergency-wizard"><div className="emergency-progress">{selected.steps.map((_, index) => { const locked = index > 0 && !completed.includes(index - 1); return <button key={index} className={`${step === index ? "active" : ""} ${completed.includes(index) ? "done" : ""}`} disabled={locked} onClick={() => setStep(index)}><span>{completed.includes(index) ? "✓" : index + 1}</span><small>{emergencyStepNames[index]}</small></button>; })}</div><div className="emergency-step-content"><div className="step-number">STEP {step + 1}</div><h2>{emergencyStepNames[step]}</h2><p className="main-action">{selected.steps[step]}</p><div className="emergency-detail-grid"><div className="prohibit"><strong>禁止操作</strong><p>{selected.prohibited}</p></div><div><strong>所需防护</strong><p>{selected.ppe}</p></div><div><strong>升级条件</strong><p>{selected.escalation}</p></div><div><strong>恢复条件</strong><p>{selected.recovery}</p></div></div><div className="wizard-actions"><button className="button button-outline" disabled={step === 0} onClick={() => setStep((value) => value - 1)}>← 上一步</button><label className="complete-check"><input type="checkbox" checked={completed.includes(step)} onChange={(event) => setCompleted(event.target.checked ? [...new Set([...completed, step])] : completed.filter((value) => value !== step))} />当前步骤已完成</label>{step < selected.steps.length - 1 ? <button className="button button-danger" disabled={!completed.includes(step)} onClick={() => setStep((value) => value + 1)}>确认本步后进入下一步 →</button> : <button className="button button-primary" disabled={!allEmergencyStepsCompleted} onClick={() => window.alert("六个演示步骤均已确认。本原型不形成正式处置记录；恢复生产前仍必须完成检测、设备完整性确认和授权审批。")}>完成演示流程</button>}</div></div></section> : <section className="panel flow-preview"><div><span className="preview-symbol">!</span><h2>准备启动分步应急流程</h2><p>系统将按 6 个阶段逐步展示操作、禁忌、防护和升级条件。</p><button className="button button-danger" onClick={startFlow}>二次确认并启动</button></div><ol>{selected.steps.map((content, index) => <li key={content}><span>{index + 1}</span><div><strong>{emergencyStepNames[index]}</strong><p>{content}</p></div></li>)}</ol></section>}
     </section> : null}
   </div>;
 }
@@ -751,7 +817,9 @@ type SimPoint = { time: number; temp: number; target: number; error: number; hea
 
 function runSimulation(params: SimParams) {
   const points: SimPoint[] = []; let temp = params.initial; let integral = 0; let previousError = params.target - temp;
-  for (let time = 0; time <= params.duration; time += params.dt) {
+  const pointCount = Math.min(simulationPointCount(params.duration, params.dt), MAX_SIMULATION_POINTS);
+  for (let index = 0; index < pointCount; index += 1) {
+    const time = Math.min(index * params.dt, params.duration);
     const error = params.target - temp; const derivative = (error - previousError) / params.dt;
     const proposedIntegral = clamp(integral + error * params.dt, -500, 500);
     const raw = params.kp * error + params.ki * proposedIntegral + params.kd * derivative;
@@ -806,8 +874,14 @@ function SimulationModule() {
   };
 
   const start = () => {
-    if (params.mass <= 0 || params.cp <= 0 || params.duration <= 0 || params.dt <= 0 || params.maxHeat < 0 || params.maxCool < 0) {
-      window.alert("请检查模型参数：质量、比热容、仿真时间和时间步长必须大于 0，加热与冷却能力不能为负数。");
+    const pointCount = simulationPointCount(params.duration, params.dt);
+    if (!Object.values(params).every(Number.isFinite) || params.mass <= 0 || params.cp <= 0 || params.duration <= 0 || params.dt <= 0 || params.maxHeat < 0 || params.maxCool < 0) {
+      window.alert("请检查模型参数：所有数值必须有限；质量、比热容、仿真时间和时间步长必须大于 0，加热与冷却能力不能为负数。");
+      setStage("params");
+      return;
+    }
+    if (pointCount > MAX_SIMULATION_POINTS) {
+      window.alert(`当前参数将生成 ${pointCount.toLocaleString("zh-CN")} 个采样点，超过 ${MAX_SIMULATION_POINTS.toLocaleString("zh-CN")} 点上限。请缩短仿真时间或增大时间步长。`);
       setStage("params");
       return;
     }
@@ -832,15 +906,16 @@ function SimulationModule() {
   const shown = points.slice(0, visible);
   const current = shown.at(-1) || points[0];
   const metrics = useMemo(() => {
-    const maxTemp = Math.max(...points.map((point) => point.temp));
+    const maxTemp = points.reduce((maximum, point) => Math.max(maximum, point.temp), Number.NEGATIVE_INFINITY);
     const overshoot = Math.max(0, maxTemp - params.target);
     const steadyError = Math.abs(points.at(-1)?.error || 0);
     const band = Math.max(params.target * 0.02, 1);
-    let settleTime = params.duration;
-    for (let index = 0; index < points.length; index += 1) if (points.slice(index).every((point) => Math.abs(point.error) <= band)) { settleTime = points[index].time; break; }
+    let lastOutsideBand = -1;
+    points.forEach((point, index) => { if (Math.abs(point.error) > band) lastOutsideBand = index; });
+    const settleTime = lastOutsideBand < points.length - 1 ? points[lastOutsideBand + 1].time : params.duration;
     return { maxTemp, overshoot, steadyError, settleTime, stable: steadyError <= band && overshoot < params.target * 0.1 };
   }, [params.duration, params.target, points]);
-  const comparePid = () => { const alternate = runSimulation({ ...params, kp: params.kp * 0.75, kd: params.kd * 1.25 }); const max = Math.max(...alternate.map((point) => point.temp)); setComparison({ overshoot: Math.max(0, max - params.target), steadyError: Math.abs(alternate.at(-1)?.error || 0) }); };
+  const comparePid = () => { const alternate = runSimulation({ ...params, kp: params.kp * 0.75, kd: params.kd * 1.25 }); const max = alternate.reduce((maximum, point) => Math.max(maximum, point.temp), Number.NEGATIVE_INFINITY); setComparison({ overshoot: Math.max(0, max - params.target), steadyError: Math.abs(alternate.at(-1)?.error || 0) }); };
   const exportCsv = () => downloadText("PID温度仿真数据.csv", `\ufeff时间(s),设定温度(℃),实际温度(℃),偏差(℃),加热功率(%),冷却阀开度(%),PID输出(%)\n${points.map((point) => [point.time,point.target,point.temp.toFixed(3),point.error.toFixed(3),point.heat.toFixed(2),point.cool.toFixed(2),point.output.toFixed(2)].join(",")).join("\n")}`, "text/csv;charset=utf-8");
   const paramFields: Array<[keyof SimParams,string,string]> = [["initial","初始温度","℃"],["target","目标温度","℃"],["ambient","环境温度","℃"],["mass","物料质量","kg"],["cp","物料比热容","kJ/(kg·K)"],["maxHeat","最大加热功率","kW"],["maxCool","最大冷却能力","kW"],["duration","仿真总时间","s"],["dt","时间步长","s"],["reactionHeat","初始反应放热","kW"],["heatLoss","散热系数","kW/K"],["alarm","高温报警值","℃"]];
   const stageIndex = stage === "params" ? 0 : stage === "curve" ? 1 : 2;

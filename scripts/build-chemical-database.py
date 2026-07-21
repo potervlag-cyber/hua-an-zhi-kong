@@ -35,8 +35,6 @@ def cell(value: object) -> str:
 
 def classify_risk(hazards: str, toxicity: str) -> str:
     value = hazards + toxicity
-    if "待核验" in value or "未核验" in value or "部分核验" in value:
-        return "unknown"
     h_codes = set(re.findall(r"\bH\d{3}\b", value))
     if h_codes & {"H200", "H201", "H202", "H203", "H204", "H205", "H250", "H260", "H300", "H310", "H330", "H340", "H350", "H360", "H370"}:
         return "critical"
@@ -44,11 +42,18 @@ def classify_risk(hazards: str, toxicity: str) -> str:
         return "high"
     if h_codes:
         return "medium"
-    if re.search(r"剧毒|爆炸|致癌|死亡|急性毒性|自燃|有机过氧化物", value):
+    if "待核验" in value or "未核验" in value:
+        return "unknown"
+    keyword_value = re.sub(
+        r"(?:低|较低|很低|无|无明显|未见|未发现|不具有|非)\s*(?:急性)?毒性|急性毒性\s*(?:低|较低|很低)",
+        "",
+        value,
+    )
+    if re.search(r"剧毒|爆炸|致癌|死亡|急性毒性|自燃|有机过氧化物", keyword_value):
         return "critical"
-    if re.search(r"高度易燃|极度易燃|腐蚀|有毒|氧化性|特异性靶器官", value):
+    if re.search(r"高度易燃|极度易燃|腐蚀|有毒|氧化性|特异性靶器官", keyword_value):
         return "high"
-    if re.search(r"易燃|刺激|有害|窒息|健康危害", value):
+    if re.search(r"易燃|刺激|有害|窒息|健康危害", keyword_value):
         return "medium"
     return "low"
 

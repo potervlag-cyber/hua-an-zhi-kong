@@ -66,6 +66,10 @@ $Keytool = Join-Path $JavaHome "bin\keytool.exe"
 
 Push-Location $ProjectRoot
 try {
+    # Rebuild the packaged SQLite database from the checked-in source before
+    # compiling the WebView bundle so Android cannot silently ship stale safety data.
+    & npm.cmd run db:build
+    if ($LASTEXITCODE -ne 0) { throw "Chemical database build failed." }
     & npm.cmd run build:android-web
     if ($LASTEXITCODE -ne 0) { throw "Mobile web build failed." }
 } finally {

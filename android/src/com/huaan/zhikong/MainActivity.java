@@ -9,6 +9,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
@@ -58,7 +59,7 @@ public final class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(244, 247, 250));
-        webView.setWebViewClient(new LocalAssetWebViewClient(getAssets()));
+        webView.setWebViewClient(new LocalAssetWebViewClient(this, getAssets()));
         webView.setWebChromeClient(new WebChromeClient());
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -69,6 +70,12 @@ public final class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            settings.setSafeBrowsingEnabled(true);
+        }
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setLoadWithOverviewMode(true);
@@ -283,10 +290,41 @@ public final class MainActivity extends Activity {
     private static final class LocalAssetWebViewClient extends WebViewClient {
         private static final String ASSET_HOST = "appassets.androidplatform.net";
         private static final String ASSET_PREFIX = "/assets/";
+        private static final String TRUSTED_WEB_PREFIX = "/assets/www/";
+        private final Context context;
         private final AssetManager assets;
 
-        LocalAssetWebViewClient(AssetManager assets) {
+        LocalAssetWebViewClient(Context context, AssetManager assets) {
+            this.context = context;
             this.assets = assets;
+        }
+
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            return handleNavigation(request.getUrl(), request.isForMainFrame());
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            return handleNavigation(Uri.parse(url), true);
+        }
+
+        private boolean handleNavigation(Uri uri, boolean isMainFrame) {
+            if (isTrustedAssetUri(uri)) return false;
+
+            String scheme = uri.getScheme();
+            if (isMainFrame && ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))) {
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                try {
+                    context.startActivity(intent);
+                } catch (ActivityNotFoundException exception) {
+                    Toast.makeText(context, "未找到可打开外部链接的应用", Toast.LENGTH_LONG).show();
+                }
+            }
+            // Fail closed for every non-local navigation and all external subframes.
+            return true;
         }
 
         @Override
@@ -301,15 +339,9 @@ public final class MainActivity extends Activity {
         }
 
         private WebResourceResponse openAsset(Uri uri) {
-            if (!"https".equals(uri.getScheme()) || !ASSET_HOST.equals(uri.getHost())) {
-                return null;
-            }
+            if (!isTrustedAssetUri(uri)) return null;
 
             String path = uri.getPath();
-            if (path == null || !path.startsWith(ASSET_PREFIX)) {
-                return null;
-            }
-
             String assetPath = path.substring(ASSET_PREFIX.length());
             if (assetPath.isEmpty() || assetPath.contains("..")) {
                 return null;
@@ -321,6 +353,16 @@ public final class MainActivity extends Activity {
             } catch (IOException ignored) {
                 return null;
             }
+        }
+
+        private static boolean isTrustedAssetUri(Uri uri) {
+            String path = uri.getPath();
+            return "https".equalsIgnoreCase(uri.getScheme())
+                && ASSET_HOST.equalsIgnoreCase(uri.getHost())
+                && uri.getPort() == -1
+                && path != null
+                && path.startsWith(TRUSTED_WEB_PREFIX)
+                && !path.contains("..");
         }
 
         private static String mimeType(String path) {

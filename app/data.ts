@@ -1,4 +1,5 @@
 import sourceData from "./data/source-data.json";
+import { classifyChemicalRisk } from "./safety-logic";
 
 type Cell = string | number | boolean | null;
 type Row = Cell[];
@@ -13,6 +14,7 @@ const text = (value: Cell) => (value == null ? "" : String(value));
 
 export type RiskLevel = "unknown" | "low" | "medium" | "high" | "critical";
 export type ResponseLevel = "蓝色" | "黄色" | "橙色" | "红色";
+export const dataVersion = "2026-07-18";
 
 export type Chemical = {
   id: number;
@@ -41,19 +43,6 @@ export type Chemical = {
   risk: RiskLevel;
   tags: string[];
 };
-
-function chemicalRisk(hazards: string, toxicity: string): RiskLevel {
-  const value = `${hazards}${toxicity}`;
-  if (/待核验|未核验|部分核验/.test(value)) return "unknown";
-  const hCodes = new Set(value.match(/\bH\d{3}\b/g) ?? []);
-  if (["H200", "H201", "H202", "H203", "H204", "H205", "H250", "H260", "H300", "H310", "H330", "H340", "H350", "H360", "H370"].some((code) => hCodes.has(code))) return "critical";
-  if (["H220", "H221", "H222", "H224", "H225", "H226", "H228", "H240", "H241", "H242", "H251", "H252", "H261", "H270", "H271", "H272", "H301", "H311", "H314", "H317", "H318", "H331", "H334", "H341", "H351", "H361", "H372"].some((code) => hCodes.has(code))) return "high";
-  if (hCodes.size) return "medium";
-  if (/剧毒|爆炸|致癌|死亡|急性毒性|自燃|有机过氧化物/.test(value)) return "critical";
-  if (/高度易燃|极度易燃|腐蚀|有毒|氧化性|特异性靶器官/.test(value)) return "high";
-  if (/易燃|刺激|有害|窒息|健康危害/.test(value)) return "medium";
-  return "low";
-}
 
 function hazardTags(hazards: string) {
   const candidates = [
@@ -98,7 +87,7 @@ const bundledChemicals: Chemical[] = raw.chemicals["化学品安全数据"]
       pubchem: text(row[20]),
       icsc: text(row[21]),
       note: text(row[22]),
-      risk: chemicalRisk(hazards, toxicity),
+      risk: classifyChemicalRisk(hazards, toxicity),
       tags: hazardTags(hazards),
     };
   });
@@ -106,12 +95,17 @@ const bundledChemicals: Chemical[] = raw.chemicals["化学品安全数据"]
 function loadAndroidChemicals(fallback: Chemical[]): Chemical[] {
   if (typeof window === "undefined") return fallback;
   const bridge = (window as Window & {
-    AndroidBridge?: { getChemicalsJson?: () => string };
+    AndroidBridge?: {
+      getChemicalsJson?: () => string;
+      getChemicalDatabaseInfoJson?: () => string;
+    };
   }).AndroidBridge;
-  if (!bridge?.getChemicalsJson) return fallback;
+  if (!bridge?.getChemicalsJson || !bridge.getChemicalDatabaseInfoJson) return fallback;
   try {
+    const metadata = JSON.parse(bridge.getChemicalDatabaseInfoJson()) as { data_version?: unknown; chemical_count?: unknown };
+    if (metadata.data_version !== dataVersion || metadata.chemical_count !== String(fallback.length)) return fallback;
     const parsed = JSON.parse(bridge.getChemicalsJson()) as Chemical[];
-    return parsed.length === 1500 ? parsed : fallback;
+    return parsed.length === fallback.length ? parsed : fallback;
   } catch {
     return fallback;
   }
@@ -259,5 +253,3 @@ export const emergencyStepNames = [
   "救护与环境",
   "监测恢复",
 ];
-
-export const dataVersion = "2026-07-18";
